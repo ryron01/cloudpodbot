@@ -1,0 +1,3 @@
+{
+  "body": "token=TESTTOKEN&team_id=ABC123&team_domain=my-slack-domain&service_id=1234567&channel_id=A0B3C7&channel_name=hosts&timestamp=1540930044.021500&user_id=U1234567&user_name=someuser&text=shownotes+aws+https://example.com&trigger_word=shownotes"
+}

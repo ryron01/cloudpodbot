@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: CloudPod ShowNotes updater SAM Template
+
+Globals:
+    Function:
+        Timeout: 30
+        Runtime: python3.8
+
+Parameters:
+    SlackToken:
+        Description: Slack token that is passed by the bot
+        Type: String
+    GDocID:
+        Description: GoogleDoc ID of the Shownotes doc
+        Type: String
+    GDocAPIKey:
+        Description: Google Docs API Key
+        Type: String
+    Creds:
+        Description: OAuth2 credential JSON
+        Type: String
+
+Resources:
+    ShowNotesQueue:
+        Type: AWS::SQS::Queue
+        Properties:
+            FifoQueue: true
+            ContentBasedDeduplication: true
+
+    AddNoteSlackFunction:
+        Type: AWS::Serverless::Function
+        Properties:
+            CodeUri: slack_listener/
+            Handler: app.lambda_handler
+            Environment:
+                Variables:
+                    SLACK_TOKEN: !Ref SlackToken
+                    QUEUE_NAME:
+                      Fn::GetAtt:
+                        - "ShowNotesQueue"
+                        - "QueueName"
+            Events:
+                addnote:
+                    Type: Api
+                    Properties:
+                        Path: /addnote
+                        Method: post
+            Policies:
+            - "AmazonSQSFullAccess"
+    RSSFunction:
+        Type: AWS::Serverless::Function 
+        Properties:
+            CodeUri: rss_feed/
+            Handler: app.lambda_handler
+            Environment:
+                Variables:
+                    QUEUE_NAME:
+                      Fn::GetAtt:
+                        - "ShowNotesQueue"
+                        - "QueueName"
+            Events:
+                EveryHour:
+                    Type: Schedule
+                    Properties:
+                        Schedule: rate(60 minutes)
+            Policies:
+            - "AmazonSQSFullAccess"
+    AddShowNotesFunction:
+        Type: AWS::Serverless::Function 
+        Properties:
+            CodeUri: update_show_notes/
+            Handler: app.lambda_handler
+            Environment:
+                Variables:
+                    DOC_API: !Ref GDocAPIKey
+                    DOC_ID: !Ref GDocID
+                    CREDS: !Ref Creds
+                    QUEUE_NAME:
+                      Fn::GetAtt:
+                        - "ShowNotesQueue"
+                        - "QueueName"
+            Events:
+                SQS:
+                    Type: SQS
+                    Properties:
+                        Queue: 
+                          Fn::GetAtt:
+                            - "ShowNotesQueue"
+                            - "QueueName"
+                        BatchSize: 1
+                        Enabled: true
+            Policies:
+            - "AmazonSQSFullAccess"
+Outputs:
+
+    AddNoteSlackApi:
+      Description: "API Gateway endpoint URL for AddNote Slack webhook"
+      Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/addnote/"
